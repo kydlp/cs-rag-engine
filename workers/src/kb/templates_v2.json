@@ -1,0 +1,141 @@
+[
+    {
+        "id":  "TPL-001",
+        "category":  "product_inquiry",
+        "title":  "賞味期限・保存方法（標準）",
+        "trigger":  "shelf life / storage",
+        "standard":  "賞味期限は冷凍 約1ヶ月です。解凍後はその日のうちにお召し上がりください。",
+        "ux_enhanced":  "ご連絡ありがとうございます。\n\n商品の賞味期限は冷凍で約1ヶ月でございます。解凍後はその日のうちにお召し上がりいただくのが最もおすすめです。再冷凍はお控えくださいませ。\n\n他にご不明な点がございましたらお気軽にお知らせください。",
+        "variables":  [
+
+                      ],
+        "escalated":  false,
+        "note":  "再冷凍は絶対に勧めない（食品安全）。"
+    },
+    {
+        "id":  "TPL-002",
+        "category":  "flavor_inquiry",
+        "title":  "販売中フレーバー案内",
+        "trigger":  "flavor availability",
+        "standard":  "現在の販売フレーバーは {current_flavors} です。",
+        "ux_enhanced":  "ご連絡ありがとうございます。\n\n現在販売中のフレーバーは下記でございます。\n{current_flavors}\n\nお好みのフレーバーがございましたらぜひお試しくださいませ。",
+        "variables":  [
+                          "current_flavors"
+                      ],
+        "escalated":  false
+    },
+    {
+        "id":  "TPL-003",
+        "category":  "subscription_cancel",
+        "title":  "定期便 解約 完了",
+        "trigger":  "cancel subscription",
+        "standard":  "定期便のご解約承りました。",
+        "ux_enhanced":  "ご連絡ありがとうございます。\n\n定期便のご解約、本ご連絡をもって完了とさせていただきます。これまでご利用いただき誠にありがとうございました。\n\n差し支えなければ、ご解約の理由を教えていただけますと今後の改善に活用させていただきます（任意でございます）。\n\nまた単品でのご購入もぜひお試しくださいませ。",
+        "variables":  [
+
+                      ],
+        "escalated":  false,
+        "note":  "連絡をもって完了と必ず明示する。処理漏れの事故防止のため二重確認必須。"
+    },
+    {
+        "id":  "TPL-008",
+        "category":  "shipping_delay",
+        "title":  "発送遅延（current_notice 有効）",
+        "trigger":  "shipping delay (notice valid)",
+        "standard":  "発送は {delivery_deadline} までに順次発送いたします。",
+        "ux_enhanced":  "ご連絡ありがとうございます。\n\nご注文分につきましては、{delivery_deadline}までに順次発送予定でございます。今しばらくお待ちいただけますと幸いです。\n\nご不便をおかけしまして申し訳ございません。",
+        "variables":  [
+                          "delivery_deadline"
+                      ],
+        "escalated":  false
+    },
+    {
+        "id":  "TPL-010",
+        "category":  "payment",
+        "title":  "決済方法 案内",
+        "trigger":  "payment methods",
+        "standard":  "クレジットカード・コンビニ払い・PayPay・Pay ID 等をご利用いただけます。",
+        "ux_enhanced":  "ご連絡ありがとうございます。\n\n決済方法につきまして、クレジットカード・コンビニ決済・PayPay・Pay ID をご利用いただけます。商品ページにて選択可能でございます。\n\nご不明な点がございましたらお気軽にお知らせくださいませ。",
+        "variables":  [
+
+                      ],
+        "escalated":  false
+    },
+    {
+        "id":  "TPL-013",
+        "category":  "vending_location",
+        "title":  "自販機 設置場所 案内",
+        "trigger":  "vending location",
+        "standard":  "自販機の設置場所は下記でございます。",
+        "ux_enhanced":  "ご連絡ありがとうございます。\n\n現在稼働中の自動販売機は下記でございます。\n{location_list}\n\nお近くの店舗にぜひお越しくださいませ。",
+        "variables":  [
+                          "location_list"
+                      ],
+        "escalated":  false,
+        "note":  "撤去済み拠点と混同しないよう、稼働中のみを案内する。"
+    },
+    {
+        "id":  "TPL-016",
+        "category":  "complaint_quality",
+        "title":  "品質クレーム 一次受領",
+        "trigger":  "quality complaint",
+        "standard":  "ご迷惑をおかけし申し訳ございません。担当者より改めてご連絡いたします。",
+        "ux_enhanced":  "この度はご迷惑をおかけしまして誠に申し訳ございません。\n\n商品の状態を確認させていただきたいため、お手数をおかけしますがお写真を添付のうえご返信いただけますでしょうか。担当者にて確認のうえ、改めてご連絡させていただきます。",
+        "variables":  [
+
+                      ],
+        "escalated":  true,
+        "escalation_reason":  "写真取得→担当者判断（再送/補償）。"
+    },
+    {
+        "id":  "TPL-018",
+        "category":  "other",
+        "title":  "日時指定 不可案内",
+        "trigger":  "date/time specification",
+        "standard":  "通常の通販では日時指定はお受けできません。",
+        "ux_enhanced":  "ご連絡ありがとうございます。\n\n申し訳ございませんが、通常の通販では日時のご指定はお受けできません。発送完了メールに記載のお問い合わせ伝票番号より、ヤマト運輸様にて受け取り日時の変更が可能でございます。\n\nお手数をおかけしますがよろしくお願いいたします。",
+        "variables":  [
+
+                      ],
+        "escalated":  false,
+        "note":  "まず『日時指定不可』を明示し、ヤマト側変更を案内する。"
+    },
+    {
+        "id":  "TPL-019",
+        "category":  "other",
+        "title":  "海外発送 不可案内",
+        "trigger":  "international shipping",
+        "standard":  "海外への発送は承っておりません。",
+        "ux_enhanced":  "Thank you for your inquiry.\n\nWe deeply apologize, but at this time we only ship within Japan. We cannot accept international shipping requests.\n\nWe hope to expand internationally in the future.",
+        "variables":  [
+
+                      ],
+        "escalated":  false,
+        "note":  "海外発送は不可であることを明確に伝える。曖昧化して保留しない。"
+    },
+    {
+        "id":  "TPL-020",
+        "category":  "product_inquiry",
+        "title":  "健康・安全 質問（一次受領＋エスカレ）",
+        "trigger":  "health/safety question",
+        "standard":  "こちらは担当者よりご連絡いたします。",
+        "ux_enhanced":  "ご連絡ありがとうございます。\n\nお問い合わせいただいた件につきまして、担当者にて確認のうえ改めてご連絡させていただきます。商品の主要原材料は生クリーム・スポンジ・砂糖等でございます。\n\nお時間をいただきまして申し訳ございません。",
+        "variables":  [
+
+                      ],
+        "escalated":  true,
+        "escalation_reason":  "健康・安全に関わる質問はKBにある事実のみ・断定不可。"
+    },
+    {
+        "id":  "TPL-022",
+        "category":  "product_inquiry",
+        "title":  "単品 1缶 / 組み合わせ可能",
+        "trigger":  "single can / combinations",
+        "standard":  "1缶からのご購入が可能です。",
+        "ux_enhanced":  "ご連絡ありがとうございます。\n\n1缶からのご購入が可能です。EC (Channel B) では単品でのお取り扱いがございます。組み合わせてのご購入も承れますので、お好みのフレーバーをお選びくださいませ。",
+        "variables":  [
+
+                      ],
+        "escalated":  false
+    }
+]

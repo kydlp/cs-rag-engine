@@ -1,0 +1,18 @@
+{
+  "name": "cs-rag-engine-mailbot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "CS mail draft bot (Cloudflare Workers). Inbox → AI draft → Gmail Drafts, 24/7, PC-free.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail",
+    "build-kb": "node scripts/build_kb.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0",
+    "@cloudflare/workers-types": "^4.20250901.0",
+    "typescript": "^5.5.0"
+  }
+}

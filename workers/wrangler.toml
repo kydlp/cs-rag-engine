@@ -1,0 +1,27 @@
+name = "cs-rag-engine-mailbot"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Cron: poll the inbox every 5 minutes.
+# Default-off — set crons to enable scheduled runs.
+[triggers]
+crons = []
+
+# Required Secrets (register via `wrangler secret put`):
+#   ANTHROPIC_API_KEY
+#   GOOGLE_CLIENT_ID
+#   GOOGLE_CLIENT_SECRET
+#   GOOGLE_REFRESH_TOKEN
+# Optional:
+#   ANTHROPIC_BASE_URL (default: https://api.anthropic.com)
+
+[vars]
+# Gmail label applied to processed mails (create it in Gmail first if you want a color).
+PROCESSED_LABEL = "ai-processed"
+# Inbox search: in inbox, not yet processed, within last hour.
+# `is:unread` is intentionally omitted — the user opening Gmail (auto-reading) would
+# otherwise drop messages from the queue.
+INBOX_QUERY = "in:inbox -label:ai-processed newer_than:1h"
+# Concurrent processing cap per cron tick.
+MAX_PER_TICK = "5"

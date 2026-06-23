@@ -1,0 +1,140 @@
+# cs-rag-engine-mailbot (Cloudflare Workers)
+
+Inbox → AI draft → Gmail Drafts, runs **24/7 without a local PC or session**.
+A cron schedule (every 5 min by default) checks the configured Gmail inbox and writes an
+AI draft for each new mail. **It never sends** — humans approve in the Gmail UI (Hard Rule).
+
+## Architecture
+
+```
+[Gmail inbox] ──Gmail API/OAuth──→ [Cloudflare Workers]
+                                     ├─ Cron 5min
+                                     ├─ engine (bundled src/engine)
+                                     ├─ KB JSON (bundled — redeploy to update)
+                                     └─ Anthropic API (Claude Sonnet 4.6)
+                                     ↓
+                                   createDraft → Gmail Drafts
+                                   addLabel "ai-processed" → de-dupe
+```
+
+## Setup (once)
+
+### 1. Google Cloud Console — create OAuth client
+
+1. [Google Cloud Console](https://console.cloud.google.com/) → new project (e.g. `cs-rag-engine-mailbot`).
+2. APIs & Services → Library → enable **Gmail API**.
+3. APIs & Services → OAuth consent screen.
+   - User type: **External** (Testing mode is fine).
+   - Add app name and support email.
+   - Add scope: `https://www.googleapis.com/auth/gmail.modify`.
+   - Add your Gmail address as a **test user** (Testing mode only authorizes registered users).
+4. Credentials → Create OAuth client ID.
+   - Application type: **Desktop App**.
+   - Note **client_id** and **client_secret**.
+
+### 2. Obtain a refresh_token (run locally once)
+
+```bash
+cd workers
+GOOGLE_CLIENT_ID="<your-client-id>" \
+GOOGLE_CLIENT_SECRET="<your-client-secret>" \
+node scripts/get_refresh_token.mjs
+```
+
+Open the URL printed in the terminal → consent in Google's screen → the local server captures the code and prints **refresh_token**. Save it.
+
+### 3. Deploy
+
+```bash
+cd workers
+npm install
+npx wrangler login   # skip if already logged in
+
+# Register Secrets (paste the value at each prompt):
+npx wrangler secret put ANTHROPIC_API_KEY
+npx wrangler secret put GOOGLE_CLIENT_ID
+npx wrangler secret put GOOGLE_CLIENT_SECRET
+npx wrangler secret put GOOGLE_REFRESH_TOKEN
+
+# Regenerate the bundled KB (also run after every KB change):
+npm run build-kb
+
+# Deploy.
+npm run deploy
+```
+
+Once deployed, set `crons` in `wrangler.toml` (e.g. `crons = ["*/5 * * * *"]`) and re-deploy to enable scheduled runs.
+
+### 4. (Optional) Pre-create the processed label
+
+Workers creates `ai-processed` automatically, but you can pre-create it in Gmail UI to assign a color.
+
+## Verify
+
+### Manual trigger
+
+```bash
+# Watch logs:
+npx wrangler tail
+# In another terminal, hit /run:
+curl https://cs-rag-engine-mailbot.<your-subdomain>.workers.dev/run
+```
+
+Example response:
+
+```json
+{ "scanned": 1, "drafted": 1, "errors": [] }
+```
+
+### Verify in Gmail
+
+- A draft reply appears in the same thread (Drafts folder).
+- The original thread is labeled `ai-processed`.
+- Hitting `/run` again does not create a duplicate draft.
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| 401 Unauthorized (Gmail) | refresh_token revoked / OAuth scope mismatch | Re-run step 2 |
+| 400 Anthropic invalid_request_error: credit too low | API balance exhausted | Top up at Anthropic dashboard |
+| Nothing processed | INBOX_QUERY too strict | Loosen `INBOX_QUERY` in `wrangler.toml` |
+| Cron not firing | Deploy failed / cron triggers not applied | `npx wrangler deployments list` |
+| Draft subject is mojibake | rfc2047 encoding issue | (Already handled; file an issue if seen) |
+
+## Configuration
+
+| Change | File | How to apply |
+|---|---|---|
+| Inbox filter | `wrangler.toml` → `INBOX_QUERY` | Redeploy |
+| Cron schedule | `wrangler.toml` → `crons` | Redeploy |
+| KB (masters / templates) | edit `../data/kb/*.json` | `npm run build-kb && npm run deploy` |
+| LLM system prompt | `src/engine/compose_llm.ts` → `SYSTEM_PROMPT` | Redeploy |
+
+## Out of scope (by design)
+
+- **Auto-send** (Hard Rule: human approval is mandatory).
+- **Attachment processing** (foreign-object cases need a human to inspect the photo).
+- **Reading thread history as context** (only the latest customer message is used — avoids mis-grounding on stale exchanges).
+
+## Files
+
+```
+workers/
+├── wrangler.toml          ← cron / secrets / vars
+├── package.json
+├── tsconfig.json
+├── README.md              ← this file
+├── scripts/
+│   ├── build_kb.mjs       ← data/kb → workers/src/kb JSON bundling
+│   └── get_refresh_token.mjs ← run once locally
+└── src/
+    ├── index.ts           ← cron / fetch entry
+    ├── auth/google.ts     ← refresh_token → access_token
+    ├── mail/gmail.ts      ← Gmail API (list/get/createDraft/label)
+    ├── mail/process.ts    ← existing receiver → draft glue
+    ├── mail/draft_format.ts
+    ├── mail/types.ts
+    ├── engine/            ← copy of src/engine (kb.ts uses JSON modules)
+    └── kb/                ← bundled KB (auto-generated by build_kb.mjs)
+```

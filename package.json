@@ -1,0 +1,30 @@
+{
+  "name": "cs-rag-engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "RAG-based customer support automation engine — anonymized portfolio mirror of a real D2C client project. Cloudflare Workers + Anthropic Claude + Gmail OAuth.",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "demo": "node src/demo.ts",
+    "demo:llm": "node src/demo_llm.ts",
+    "eval": "node src/eval/run.ts",
+    "eval:report": "node src/eval/run.ts --report",
+    "eval:gate": "node src/eval/gate_report.ts",
+    "eval:llm": "node src/eval/llm_quality.ts --judge --report",
+    "inbox": "node src/mail/run_inbox.ts"
+  },
+  "keywords": [
+    "rag",
+    "customer-support",
+    "cloudflare-workers",
+    "anthropic-claude",
+    "llm-as-judge",
+    "gmail-api",
+    "typescript"
+  ],
+  "author": "kydlp <motchiapple@gmail.com>",
+  "license": "MIT"
+}

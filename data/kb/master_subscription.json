@@ -1,0 +1,33 @@
+{
+  "description": "Subscription state + change-deadline rules. The monthly flavor lineup MUST be read from this file (to prevent past mis-guidance).",
+  "updated_at": "2026-06-11",
+  "updated_by": "engineer (initial scaffold)",
+  "subscription": {
+    "new_signup_status": "新規受付 停止中（2026-06-12 時点・再開時期未定）",
+    "platform": "EC (Channel A) — Pay ID payments",
+    "monthly_contents": {
+      "2026-05": ["Vanilla Classic", "Strawberry Milk", "Cherry Punch"],
+      "2026-06": "UNKNOWN（要確認：Lemon Zest, Mango が期間限定で選択可）"
+    },
+    "change_rules": {
+      "flavor_change_deadline": "3 days before payment date.",
+      "scope": "Only currently-selling products (see master_products.json).",
+      "recurrence": "For the following month, customer must contact us again."
+    },
+    "cancel_rules": {
+      "procedure": "Cancellation is completed by this message (no further customer action required) — must be stated explicitly.",
+      "flow": "State completion → thank them → ask reason (optional, mark as such) → single-purchase re-entry path (TPL-003).",
+      "caution": "Past incident: missed cancellation ⇒ next-month billing. Require double-confirmation of cancellation."
+    },
+    "auto_cancel": {
+      "causes": ["Card expired / details changed", "Insufficient funds / over limit", "Card issuer's temporary block", "Pay ID account closed"],
+      "recovery": "Re-subscribe from product page (first delivery within ~5 days).",
+      "escalation": "First verify the cancellation was NOT in-house (operator handles)."
+    }
+  },
+  "rules": [
+    "Do not answer 'this month's flavors' from memory. If the master is UNKNOWN, escalate.",
+    "For a discontinued flavor request, always propose an alternative (operator instruction).",
+    "Do not over-explain subscription details unless asked (operator instruction)."
+  ]
+}

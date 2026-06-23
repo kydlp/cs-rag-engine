@@ -1,0 +1,48 @@
+{
+  "description": "Shipping schedule + date/time-specify rules per channel. Combine with the 3-fact pre-reply check (shipped yet? / delivery status? / sale status?).",
+  "updated_at": "2026-06-12",
+  "updated_by": "engineer (initial scaffold)",
+  "current_notice": {
+    "description": "Time-bounded shipping notice. Promised shipping date lives here; past valid_until ⇒ escalate. Updated by operator → engineer reflects same day.",
+    "value": "Orders will ship in turn by 2026-06-15.",
+    "source": "Operator instruction 2026-06-04",
+    "valid_until": "2026-06-15"
+  },
+  "channels": [
+    {
+      "channel": "EC (Channel A)",
+      "shipping_estimate": "Reference the 'expected delivery' date on each product page (product-specific; do not use the legacy '20–30 days from order' value).",
+      "date_time_specify": false,
+      "alternative": "Use the tracking number in the shipped notification to change delivery time with the courier. For extended absences, contact us in advance to adjust.",
+      "notes": "Free shipping on orders over ¥10,000."
+    },
+    {
+      "channel": "EC (Channel B)",
+      "shipping_estimate": "Reference 'expected delivery' on each product page.",
+      "date_time_specify": false,
+      "alternative": "Suggest courier-side change.",
+      "notes": "Single-can purchase. Order processing (cancellation, address change) is handled by the operator — auto-escalate."
+    },
+    {
+      "channel": "Gift",
+      "shipping_estimate": "UNKNOWN",
+      "date_time_specify": true,
+      "alternative": "—",
+      "notes": "Only channel with date specification (logistics handles directly). Mis-identifying channel ⇒ wrong guidance."
+    },
+    {
+      "channel": "Subscription",
+      "shipping_estimate": "After resigning, first delivery within ~5 days.",
+      "date_time_specify": false,
+      "alternative": "Suggest courier-side change.",
+      "notes": "See master_subscription.json for details."
+    }
+  ],
+  "rules": [
+    "All time-bounded shipping info comes from current_notice (no hardcoding in code or skills).",
+    "Always identify the channel before replying (mis-identification ⇒ wrong guidance).",
+    "For shipping-delay inquiries, verify in the order management system whether the order has shipped before replying.",
+    "Address changes after shipping are not possible → direct to courier + provide safety net ('if returned, we will reship').",
+    "When the deadline is exceeded, commit with 'we will look into this on priority' (templates_v2 #8)."
+  ]
+}

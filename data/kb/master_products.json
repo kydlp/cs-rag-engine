@@ -1,0 +1,54 @@
+{
+  "description": "Sample brand product master (sample-sweets-d2c). The engine reads facts only from this file — never from memory.",
+  "updated_at": "2026-06-11",
+  "updated_by": "engineer (initial scaffold)",
+  "products": [
+    {
+      "name": "Vanilla Classic",
+      "channels": ["EC (Channel A)", "EC (Channel B)", "Vending", "Subscription"],
+      "status": "販売中",
+      "shelf_life": "冷凍 約1ヶ月（解凍後は当日中。再冷凍は推奨禁止）",
+      "notes": "Subscription default flavor."
+    },
+    {
+      "name": "Strawberry Milk",
+      "channels": ["Subscription"],
+      "status": "終売（2026年6月〜）",
+      "shelf_life": "冷凍 約1ヶ月",
+      "notes": "May limited-edition subscription flavor. Not selectable from June onward."
+    },
+    {
+      "name": "Cherry Punch",
+      "channels": ["EC", "Subscription"],
+      "status": "販売中（期間未定・在庫なくなり次第終了の可能性）",
+      "shelf_life": "冷凍 約1ヶ月",
+      "notes": "End date not yet defined."
+    },
+    {
+      "name": "Mango",
+      "channels": ["EC", "Subscription"],
+      "status": "販売中（6月〜期間限定）",
+      "shelf_life": "冷凍 約1ヶ月",
+      "notes": "Default alternative when Strawberry Milk is requested (now discontinued)."
+    },
+    {
+      "name": "Lemon Zest",
+      "channels": ["EC", "Subscription", "Vending"],
+      "status": "販売中（6月〜期間限定）",
+      "shelf_life": "冷凍 約1ヶ月",
+      "notes": "Vending launch first → EC online from 2026-05-23 20:00."
+    },
+    {
+      "name": "Mint Cream",
+      "channels": [],
+      "status": "通販・自販機とも販売なし（催事のみ実績あり）",
+      "shelf_life": "UNKNOWN",
+      "notes": "Append the operator-approved phrasing: 'We are reviewing launching this on EC / vending; details will be posted on official SNS'. Most recent event: Sample Hall Pop-up 5/21–6/3 (ended)."
+    }
+  ],
+  "rules": [
+    "When responding about a discontinued / unavailable product, ALWAYS propose a currently-selling alternative (the No + Alternative principle).",
+    "Never recommend refreezing (food safety; operator correction).",
+    "Single-can purchase is available on Channel B (do not say 'set sales only')."
+  ]
+}

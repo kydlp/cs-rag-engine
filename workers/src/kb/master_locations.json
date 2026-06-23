@@ -1,0 +1,22 @@
+{
+  "description": "Vending machine location master. The engine reads from this file only. Removed sites stay listed (under 'do not confuse with active').",
+  "updated_at": "2026-06-11",
+  "updated_by": "engineer (initial scaffold)",
+  "locations": [
+    { "name": "Sample Location A — Tokyo (Ikebukuro area)", "address": "Tokyo, Toshima ward 詳細UNKNOWN", "status": "稼働中", "last_verified": "2026-05" },
+    { "name": "Sample Location B — Tochigi (Utsunomiya)", "address": "Tochigi, Utsunomiya 詳細UNKNOWN", "status": "稼働中", "last_verified": "2026-05" },
+    { "name": "Sample Location C — Osaka (Abeno)", "address": "Osaka, Abeno ward 詳細UNKNOWN", "status": "稼働中", "last_verified": "2026-06", "notes": "Often confused with Shibuya location. Brief mechanical pause earlier → resumed." },
+    { "name": "Sample Location D — Tokyo (Shinjuku Kabukicho)", "address": "Tokyo, Shinjuku ward 詳細UNKNOWN", "status": "稼働中", "last_verified": "2026-05" },
+    { "name": "Sample Location E — Tokyo (Machida)", "address": "Tokyo, Machida 詳細UNKNOWN", "status": "稼働中", "last_verified": "2026-05" },
+    { "name": "Sample Location F — Kanagawa (Kawasaki)", "address": "Kanagawa, Kawasaki 詳細UNKNOWN", "status": "稼働中", "last_verified": "2026-05" },
+    { "name": "Sample Location G — Kanagawa (Yokohama)", "address": "Kanagawa, Yokohama 詳細UNKNOWN", "status": "稼働中", "last_verified": "2026-05" },
+    { "name": "Sample Location H — Osaka (Dotonbori)", "address": "Osaka, Chuo ward 詳細UNKNOWN", "status": "稼働中", "last_verified": "2026-05" },
+    { "name": "Sample Location X — Tokyo (Shibuya)", "address": "Tokyo, Shibuya ward", "status": "撤去済み", "last_verified": "2026-05", "notes": "If a customer says only 'Shibuya', mention both Shibuya (removed) and Abeno (operator instruction)." },
+    { "name": "Sample Location Y — Hokkaido (Sapporo)", "address": "Hokkaido, Sapporo", "status": "撤去済み", "last_verified": "2026-05", "notes": "Removed per operator instruction." }
+  ],
+  "rules": [
+    "When a customer asks about a removed location, always recommend an active location + the EC store.",
+    "Ambiguous place names (e.g. 'I saw it in Shibuya') should disambiguate across candidates.",
+    "Installation requests are acknowledged only (operator decides) — escalate."
+  ]
+}
