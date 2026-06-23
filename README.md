@@ -217,7 +217,7 @@ Full guide: [`workers/README.md`](workers/README.md).
 
 ## 8. Acknowledgements
 
-This is the public-facing version of a freelance project. The production system, customer LINE / mail logs, and contractual details remain private. The original engineering effort (knowledge extraction, evaluation framework, safety design, deployment) was solo over ~6 weeks.
+This is the public-facing version of a freelance project. The production system, customer LINE / mail logs, and contractual details remain private. The original engineering effort (knowledge extraction, evaluation framework, safety design, deployment) was solo over ~10 days.
 
 ## License
 
