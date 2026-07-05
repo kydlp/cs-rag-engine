@@ -261,6 +261,18 @@ if (judgeEnabled) {
   const fDist = [0, 1, 2].map((v) => judged.filter((c) => c.judge!.factual_alignment === v).length);
   const hDist = [0, 1, 2].map((v) => judged.filter((c) => c.judge!.no_hallucination === v).length);
   const passed = judged.filter((c) => c.judge!.factual_alignment >= 1.5 && c.judge!.no_hallucination >= 1.5).length;
+  // Machine-readable sidecar for the progress ledger (src/eval/progress.ts picks this up).
+  if (judged.length) {
+    const sidecar = join(ROOT, "reports", "llm_quality.latest.json");
+    mkdirSync(dirname(sidecar), { recursive: true });
+    writeFileSync(sidecar, JSON.stringify({
+      ts: new Date().toISOString(),
+      judged: judged.length,
+      pass_rate: passed / judged.length,
+      factual_alignment: fAvg,
+      no_hallucination: hAvg,
+    }) + "\n", "utf-8");
+  }
   summaryLines.push("");
   summaryLines.push(`judged: ${judged.length}/${n} (parse failures: ${judgeFailed})`);
   summaryLines.push(`factual_alignment avg ${fAvg.toFixed(2)}  [0=${fDist[0]} / 1=${fDist[1]} / 2=${fDist[2]}]`);

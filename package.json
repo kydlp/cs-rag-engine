@@ -14,6 +14,8 @@
     "eval:report": "node src/eval/run.ts --report",
     "eval:gate": "node src/eval/gate_report.ts",
     "eval:llm": "node src/eval/llm_quality.ts --judge --report",
+    "progress": "node src/eval/progress.ts --md",
+    "progress:show": "node src/eval/progress.ts --show",
     "inbox": "node src/mail/run_inbox.ts"
   },
   "keywords": [

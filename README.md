@@ -1,231 +1,539 @@
 # cs-rag-engine
 
-> **AI customer support automation engine** for a D2C sweets brand (RAG + LLM judge + Cloudflare Workers).
-> Target: **90%+ of 150–300 monthly inquiries handled without human approval**.
-> Achieved: **escalation precision 98%, zero hallucinated facts, pass rate 73% → 80% in 5 business days**.
+> **「送信」だけは、AIにさせない。**
+> 食品D2Cブランドのカスタマーサポートを、*人間承認フロー付き*で自動化するRAGエンジン。
+> 事実はすべてナレッジベースから。嘘をつかせない仕組みを、プロンプトではなく **コードで** 縛る。
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)](#)
 [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare_Workers-Edge_Runtime-F38020?logo=cloudflare&logoColor=white)](#)
 [![Anthropic Claude](https://img.shields.io/badge/Anthropic-Claude_Sonnet_4.6-D4A373)](#)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-> **About this repository.** This is an **anonymized portfolio mirror** of a real freelance client project (a Japanese D2C sweets brand). The architecture, evaluation framework, and Cloudflare Workers infrastructure are reproduced faithfully; client names, customer data, and production prompts have been replaced. The original production code remains private — face-to-face demo available on request.
+> **このリポジトリについて。** これは、実際に受注した **フリーランス案件（ある日本のD2Cスイーツブランド）** の
+> **匿名化した公開ミラー** です。アーキテクチャ・評価フレームワーク・Cloudflare Workers のインフラは
+> 忠実に再現していますが、クライアント名・顧客データ・本番プロンプト・実ナレッジは差し替えています。
+> 本番コードと実運用の詳細な数字は非公開で、対面デモは応相談です。
 
 ---
 
-## TL;DR
+## これは何か
 
-| metric | value (production system) |
+問い合わせメール（あるいは LINE / Instagram DM）を受け取り、**ナレッジベースに根拠のある返信文の「下書き」だけ** を
+Gmail の下書きフォルダに書き込むエンジンです。**顧客への送信は、必ず人間が承認して行います。**
+
+- **入力**: 顧客からの1通の問い合わせ（本文・チャネル・宛名）
+- **出力**: 敬語で整った返信下書き＋固定署名。危険な問い合わせは自動で「人間対応キュー」に回す
+- **想定ユーザー**: 少人数で回している D2C ブランドの CS 担当者・意思決定者
+
+| 指標 | 値（本番システム） |
 |---|---|
-| Inquiries handled | **~127/month** (extracted from 40-day inbound log) |
-| **Escalation precision** | **49/50 (98.0%)** |
-| **FN (unsafe miss)** | **0** |
-| **Zero-hallucination cases (H=0)** | **0/49 — Hard Rule respected** |
-| Pass rate on LLM judge | **73% → 80%** (+7 pp in 5 business days) |
-| Build cost (freelance) | **¥198,000** vs typical SI vendor ¥1.5M–¥30M |
-| Monthly run cost | **¥16,500** (Cloudflare + Anthropic + ops) |
-| Runtime | **Cloudflare Workers · Cron 5min · 24/7 PC-free** |
+| 問い合わせ規模 | **月150〜300件**（40日分の受信ログでの実測は約127件/月） |
+| **エスカレーション精度** | **49/50（98.0%）** |
+| **FN（危険な見逃し）** | **0件** |
+| **ハルシネーション（KBにない事実の断定）** | **0/49 ── Hard Rule 遵守** |
+| LLMジャッジ合格率 | **73% → 80%**（実運用5営業日で +7pt） |
+| 構築費 | 一般的なSIベンダー見積の **桁違いに安い**（スタートアップ予算内） |
+| 月額運用費 | Cloudflare + API従量課金で **数千円規模** |
+| ランタイム | **Cloudflare Workers・Cron 5分・24時間PCレス** |
 
 ---
 
-## 1. Problem
+## 背景 ── なぜ作ったか
 
-A small D2C team was running CS through a manual loop: customer mail / LINE / IG → ticketed in group chat → operator drafts reply → decision-maker approves → send. At ~127 inquiries/month this **bottlenecked the operator**, and the published FAQ was out of date (e.g. "shelf life 15–30 days" contradicted the new "frozen ~1 month" rule). A SaaS vendor would have quoted ¥1.5M–¥30M build + ¥30k–¥500k/month run — far outside the startup budget.
+友人の会社の CS が、正直グダグダだった。
 
-What was needed: a CS automation system that fits a startup budget, that **enforces "draft only, human sends"** at the code level (not just the prompt), and that has a measurable improvement loop.
+問い合わせが来る → スタッフが見て、AIで返信案を作る → その案を LINE グループに貼る →
+社長がゴーサインを出す → やっと返信する。この手動ループが回っていた。
+
+効率が悪すぎるし、顧客体験も損なう。人手を挟むぶん **返信忘れ** が起きるし、
+急ぎの問い合わせが LINE の中で埋もれる。**危ない。**
+
+もう一つ危ないのが **回答のブレ** だった。国際発送やアレルギー情報のような
+「答えを間違えたら事故になる」質問に対して、社長やスタッフの回答が人によって・その日によってブレる。
+つまり **人間がハルシネーションを起こす**（うろ覚えで断定してしまう）。ここが一番怖かった。
+
+解くべき課題は、突き詰めると2つ：
+
+1. **意思決定者（社長）の負担と、回答のブレ** ── 事実の唯一の出典を1か所に固定し、そこにない事実は断定させない
+2. **CS対応スタッフの人件費** ── 定型的な問い合わせの下書き作成を自動化し、人間は「承認」だけに集中させる
+
+ただし **全自動にはしない。** 「AIが勝手に顧客へ送る」ことだけは、絶対にやらせたくなかった。
+承認フローは残す。残したうえで、その手前の9割を機械に肩代わりさせる ── それがこのエンジンの狙いです。
+
+これは学習用の習作ではなく、**収益を得たフリーランスの実案件** です。本番は Cron 5分で受信箱をポーリングし、
+下書きを生成し続けています。
 
 ---
 
-## 2. Solution — three design pillars
+## 設計思想 ── 「送信」だけはAIにさせない
 
-### 2.1 Architecture
+このエンジンで最も大事にしているのは、たった1つの発想です。
 
-```mermaid
-flowchart LR
-  Customer[Customer]
-  Customer -->|inquiry| Gmail[Gmail inbox]
+> **LLMは、プロンプトではなくコードで縛る。**
 
-  subgraph Edge[Cloudflare Workers · Cron every 5 min]
-    Cron[Cron Trigger]
-    Engine[CS Engine<br/>classify → escalation → compose]
-    LLM[Anthropic API<br/>Claude Sonnet 4.6]
-  end
+LLM を使った CS 自動化でいちばんよくある失敗は、
+「プロンプトに『送信するな』と書いていたのに、モデルのアップデートでその指示が破れて誤送信した」というものです。
+プロンプトは"お願い"にすぎず、モデルが変われば挙動も変わる。
 
-  Gmail -->|Gmail API / OAuth| Cron
-  Cron --> Engine
-  Engine -->|knowledge lookup| KB[(KB — 5 masters JSON<br/>products / shipping / subscription /<br/>locations / signature)]
-  Engine -->|prompt + facts| LLM
-  LLM -->|polished body| Engine
-  Engine -->|createDraft| Gmail
-  Engine -->|labelMessage 'ai-processed'| Gmail
+だから、**壊れうる場所そのものを消す** アプローチを取りました。
 
-  Gmail -->|review drafts| Human[Human approval<br/>CS operator / decision-maker]
-  Human -->|send when approved| Customer
-
-  classDef edge fill:#FFF3E0,stroke:#F38020,color:#000
-  class Cron,Engine,LLM edge
-```
-
-### 2.2 Pillar 1 — Hard Rule enforcement at the code level
-
-> The most common LLM CS failure is "we wrote 'don't send' in the prompt and a model update broke it". We avoid this by removing the failure mode at the code level.
-
-- **No `sendMessage` codepath exists in the engine.** The only Gmail write API used is `createDraft`. A model that "wants" to send cannot — the import isn't there.
-- **Required escalations are code branches**, not prompt instructions. `escalation.ts` filters foreign-object/health, refund/coupon/transfer, legal mentions, vending install requests, etc. *before* any LLM call.
-- **Fixed signature is concatenated by code from `master_signature.json`** — the LLM is forbidden from generating it.
-- **KB-only facts.** If the KB doesn't say it, the model must answer "[要確認: …]" or escalate.
-
-See [`docs/safety-rules.md`](docs/safety-rules.md) for the seven required-escalation categories.
-
-### 2.3 Pillar 2 — Single Source of Truth: 5 JSON masters
-
-Time-varying facts live in **only one place** — `data/kb/*.json`:
-
-| master | content |
-|---|---|
-| `master_products.json` | currently-selling flavors, shelf life, channels, aliases |
-| `master_shipping.json` | per-channel shipping estimates, date/time specification, time-bounded notice (`current_notice` with `valid_until`) |
-| `master_subscription.json` | new-signup status, change/cancel rules |
-| `master_locations.json` | active and removed vending machines |
-| `master_signature.json` | the customer-facing signature block |
-
-The operator notifies the engineer of a change → the engineer updates the master + bumps `updated_at` / `updated_by` → next deploy reflects same day. `data/extracted/templates_v2.jsonl` is the operator-approved reply boilerplate (≈ 19 templates in production, 11 in this sample).
-
-### 2.4 Pillar 3 — Golden set + LLM-as-judge
-
-- **Golden set** — 50 anchored real-customer cases (10 synthetic samples in this public mirror) labeled with expected category + escalation flag + difficulty (`easy`/`normal`/`trap`).
-- **LLM judge** scores each generated draft on two axes (`factual_alignment`, `no_hallucination`) on a 0/1/2 scale. The rubric is in [`.claude/skills/eval-rubric/SKILL.md`](.claude/skills/eval-rubric/SKILL.md).
-- **`/eval-analyze-improve`** Claude Code skill runs the deterministic eval, scores the worst-5, classifies root causes (KB / prompt / classifier / template), and writes an improvement log. Combine with `/loop 1d` to run daily, autonomously.
-
-Real iteration from the production loop:
-
-> Baseline (2026-06-13): factual_alignment 1.67, pass rate 73%.
-> Day +5 (2026-06-17): SYSTEM_PROMPT line added enforcing template `notes`; PRODUCT_ALIASES expanded; payment classifier co-occurrence rule. → factual_alignment **1.77**, pass rate **80%**. Three of the worst-5 closed without regressing the rest.
-
-### 2.5 Tech stack
-
-| layer | choice | why |
+| 縛りたいこと | プロンプトでの実装（弱い） | このエンジンの実装（コードで縛る） |
 |---|---|---|
-| Engine | **TypeScript** (Node 22.18+) | Imports straight into Cloudflare Workers, no build step |
-| LLM | **Anthropic Claude Sonnet 4.6** | Japanese keigo quality; reliable JSON output for the judge |
-| Knowledge store | **5 JSON masters** (no vector DB) | At this size, `git diff` on `master_*.json` is a better audit than ChromaDB. Vector storage can be added when the KB grows. |
-| Inbox | **Gmail API (OAuth 2.0 Desktop)** | The brand's main channel. refresh_token → 24/7 |
-| Hosting | **Cloudflare Workers + Cron Triggers** | Always-on; no PC required; a few dollars/month |
-| Secrets | **`wrangler secret`** | Encrypted at the platform |
-| Evaluation | **LLM-as-judge (Claude)** | Reproduces human scoring at ~1/10 the cost |
+| AIが顧客へ送信しない | 「送信しないで」と指示 | エンジンに **`sendMessage` のコードパスが存在しない**。使う書き込みAPIは `createDraft` のみ |
+| KBにない事実を断定しない | 「創作するな」と指示 | 事実はコードが KB から集めて渡し、未確定は `[要確認: …]` で残す。決定的フォールバックはテンプレとマスタの値しか使わない |
+| 危険な問い合わせを人間に回す | 「危ないものはフラグ立てて」と指示 | `escalation.ts` の正規表現＋分類カテゴリで、**LLMを呼ぶ前に** コード分岐でエスカレ |
+| 署名・会社情報を勝手に書き換えない | 「署名はこれで」と指示 | LLM生成後、コードが `master_signature.json` を機械的に連結。LLMには生成させない |
+
+結果として、**モデルを新しい Claude / 安いモデル / ファインチューンに載せ替えても、
+安全契約（送信禁止・エスカレ・署名）は再検証なしで保たれる。** これがこのプロダクトの背骨です。
 
 ---
 
-## 3. Repository layout
+## 仕組み ── RAGパイプライン
+
+1通の問い合わせが下書きになるまで：
 
 ```
-cs-rag-engine/
-├── README.md                       ← this file
-├── LICENSE                         ← MIT
-├── docs/
-│   ├── architecture.md             ← full diagram + data flow
-│   ├── safety-rules.md             ← Hard Rule + 7 required-escalation categories
-│   └── eval-methodology.md         ← golden set + LLM judge + improvement loop
-├── src/
-│   ├── engine/                     ← classify / escalation / compose / compose_llm / gate / kb
-│   ├── eval/                       ← run / gate_report / llm_quality (LLM judge)
-│   ├── mail/                       ← half-manual MCP-Gmail loop
-│   ├── adapters/line-harness.ts    ← LINE adapter (sidecar or embedded)
-│   └── cli.ts / demo.ts / demo_llm.ts
-├── workers/                        ← Cloudflare Workers production loop
-│   ├── src/                        ← cron entry + auth + Gmail client + bundled engine
-│   ├── scripts/                    ← build_kb + get_refresh_token
-│   ├── wrangler.toml
-│   └── README.md                   ← deploy guide
-├── data/
-│   ├── kb/                         ← 5 sample masters (anonymized fictional brand)
-│   ├── extracted/                  ← sample templates_v2.jsonl
-│   └── eval/                       ← sample golden set (10 cases)
-└── .claude/
-    ├── commands/cs-triage.md       ← unanswered LINE triage + send-on-approval
-    ├── commands/eval-analyze-improve.md ← daily worst-5 → improvement log
-    └── skills/eval-rubric/SKILL.md ← rubric used by the LLM judge
+顧客メール
+  │  Gmail API list/get
+  ▼
+InboundMail { from, subject, body, channel, customerName }
+  │  classify()                    ← キーワード/重み付けで16カテゴリに分類（API不要・決定的）
+  ▼
+{ category, confidence, scores }
+  │  decideEscalation()            ← Hard Rule（正規表現）＋KB鮮度＋確信度フロア
+  ▼
+{ escalate, reason, notices }
+  │  buildGroundingContext()       ← ★RAGの検索フェーズ：カテゴリと本文からKB該当事実を収集
+  │    ├ 販売中フレーバー / 賞味期限 / 発送目安(current_notice) / 自販機稼働リスト …
+  │    └ 手本テンプレ（口調の見本）＋未確定スロット
+  ▼
+{ facts, template, referenceDraft, unresolved }
+  │  composeLLM()                  ← ★生成フェーズ：Claude が「渡された事実の範囲内で」敬語に整文
+  │                                   （鍵なし/失敗時は決定的 compose() にフォールバック）
+  ▼
+{ draft, needsInfo, sources }
+  │  decideSend()                  ← 安全フロア＋自動送信allowlist＋シャドーモード
+  ▼
+{ predictedMode, effectiveMode }   ← 既定は必ず human_approval（＝人間承認）
+  │  toGmailDraft() → Gmail createDraft
+  ▼
+Gmail 下書きフォルダ  ← 人間がここでレビューして送信する
+```
+
+### なぜベクトルDBを使わないのか
+
+これは「RAG」と名乗りながら、pgvector も Pinecone も Chroma も使っていません。
+時期で変わる事実（販売状況・発送目安・定期便ルールなど）を **5つのJSONマスタ** に集約し、
+分類カテゴリに応じて該当事実を **決定的に** 引き当てて LLM に渡す ── いわば「疑似RAG」です。
+
+理由は規模。**月100〜300件・事実DBが数十項目** の規模では、
+`git diff master_*.json` で変更履歴を追えることのほうが、ベクトルストアの近似検索より遥かに監査しやすい。
+KB が数百項目を超えたらベクトル化に切り替えればよく、その時まではこれで十分、と判断しました。
+
+### 事実の唯一の出典 ── 5つのJSONマスタ
+
+| マスタ | 内容 |
+|---|---|
+| `master_products.json` | 販売中/終売フレーバー・賞味期限・チャネル・別名 |
+| `master_shipping.json` | チャネル別発送目安・日時指定可否・期限付き告知（`current_notice` と `valid_until`） |
+| `master_subscription.json` | 定期便の新規受付状態・変更/解約ルール |
+| `master_locations.json` | 稼働中/撤去済みの自販機設置場所 |
+| `master_signature.json` | 顧客向け固定署名ブロック |
+
+運用者が変更を通知 → エンジニアがマスタを更新し `updated_at` / `updated_by` を必ず更新 →
+次のデプロイで即日反映。この一方通行が「回答のブレ」を消す装置です。
+`data/extracted/templates_v2.jsonl` は運用者承認済みの返信定型（本番約19件・本サンプルは11件）。
+
+---
+
+## アーキテクチャ
+
+```
+                      ┌─────────────────────────────────────────────┐
+   顧客               │   Cloudflare Workers ・ Cron 5分ごと          │
+    │                 │                                             │
+    │ 問い合わせ       │   ┌──────────┐   ┌─────────────────────┐   │
+    ▼                 │   │  Cron    │──▶│ CS Engine           │   │
+┌─────────┐  Gmail    │   │ Trigger  │   │ classify            │   │
+│  Gmail   │─ API ────▶│   └──────────┘   │  → escalation       │   │
+│ 受信箱   │  OAuth    │                  │  → grounding(RAG)   │   │
+└─────────┘           │                  │  → compose(LLM整文) │   │
+    ▲                 │                  │  → gate             │   │
+    │ createDraft     │                  └──────────┬──────────┘   │
+    │ + ラベル付与     │        ┌────────────────┐   │  事実引当     │
+┌─────────┐           │        │ Anthropic API  │◀──┤ ────────────▶ ┌──────────────┐
+│  下書き  │◀──────────│────────│ Claude Sonnet  │   │               │ KB 5マスタ    │
+│ フォルダ │           │        │     4.6        │───┘               │ (JSON・SSOT) │
+└─────────┘           │        └────────────────┘                   └──────────────┘
+    │                 └─────────────────────────────────────────────┘
+    │ レビュー
+    ▼
+┌──────────────────────────┐   承認したら送信
+│ 人間（CS担当・意思決定者） │ ─────────────────▶ 顧客
+└──────────────────────────┘
+```
+
+- **送信のアクションは、この図の右下の人間にしか存在しない。** エンジンは下書きを置くだけ。
+- Cloudflare Workers 上で 24時間動くので、**担当者のPCが開いている必要がない。**
+- 返信は1問い合わせにつき1レスポンス。マルチターンやツールループは不要なので、
+  ストリーミングも Durable Object も Queue も使っていません（`docs/architecture.md` 参照）。
+
+---
+
+## 安全設計 ── Hard Rule をコードで縛る
+
+安全は2層。どちらも **コードレベル** で強制され、プロンプトには依存しません。
+
+### 1. AIは自動送信しない（絶対）
+
+エンジンに `sendMessage` の呼び出しが **存在しない。** 使う Gmail 書き込みAPIは `createDraft` だけ。
+「送りたい」と思ったモデルがいても、そのコードパスがないので送れません。
+
+### 2. 必ず人間対応に回す7カテゴリ
+
+`escalation.ts` の `HARD_ESCALATION`（本文の正規表現マッチ）と `ALWAYS_ESCALATE`（カテゴリ）で、
+LLMを呼ぶ前にコード分岐で判定します。
+
+| # | カテゴリ | 理由 |
+|---|---|---|
+| 1 | 自販機の設置依頼 | ビジネス判断（受けるかは運用者が決める） |
+| 2 | 異物混入・健康被害 | 写真確認が必要／返金フローは人間限定 |
+| 3 | クーポン・返金・銀行振込 | 金銭の決定は人間限定 |
+| 4 | 法的言及・強いクレーム | 謝罪テンプレのみ→以降は人間 |
+| 5 | 重複配送の最終判断 | 受け取り可の下書きは作れるが、返送対応は人間限定 |
+| 6 | ギフティング・PR案件 | ビジネス窓口へ誘導 |
+| 7 | 決済代行まわりの詳細 | 口座レベルの確認は運用者しかできない |
+
+エスカレ判定は「モデルに危険を見つけさせる」のではなく、**本文の正規表現＋分類カテゴリ** で機械的に行います。
+だからモデルを載せ替えてもエスカレ契約は破れない。詳細は [`docs/safety-rules.md`](docs/safety-rules.md)。
+
+### 3. 署名はコードが連結する
+
+LLMのシステムプロンプトは署名の生成を **禁止** しており、生成後にコードが `master_signature.json` を連結します。
+会社名・住所・署名文をLLMが書き換えることは、**構造上不可能** です。
+
+### 4. KBにない事実は断定しない
+
+システムプロンプトで「記載のない事実（在庫・日付・価格・住所・注文番号・追跡番号）は推測・創作しない」と縛り、
+KBにない情報は `[要確認: …]` として残すか、エスカレします。
+評価ではハルシネーションを `no_hallucination=0` として最悪ケースに浮かび上がらせます。
+
+---
+
+## AIの使い方 ── モデルとプロンプト全文
+
+透明であること自体を姿勢にしています。使っているモデルもプロンプトも隠しません。
+
+### 生成モデル
+
+- **モデル**: `claude-sonnet-4-6`（Anthropic Messages API を `fetch` で直叩き。エンジンは依存ゼロ）
+- **パラメータ**: `max_tokens: 1500` / `thinking: disabled` / `output_config.effort: "medium"`
+- **役割**: LLMがやるのは **「渡された事実の範囲内で、敬語に整文する」ことだけ。** 分類・エスカレ・事実引当・監査ソースは、すべて決定的なコード（`compose.ts`）が担う
+
+### 生成のシステムプロンプト（全文）
+
+```text
+あなたは食品ECブランドのカスタマーサポート担当です。
+顧客メッセージに対し、丁寧で温かい日本語の敬語で返信文を作成します。
+
+厳守ルール：
+1. 事実は『提供された事実・テンプレ』のみを使用する。記載のない事実（在庫・日付・価格・住所・注文番号・追跡番号）は推測・創作しない。
+2. テンプレの note（禁止事項・必須要素）を必ず守る（例：再冷凍を勧めない／終売フレーバーには代替提案を添える）。
+3. 提供された事実欄に `〔notes: …〕` が付随する項目があれば、その notes の指示を返信本文に必ず反映する。
+4. 未確定スロットの値は発明せず、`[要確認: 項目名]` のまま残す。
+5. 固定署名や会社情報は付けない（システムが後で付与する）。
+6. Instagram の場合のみ絵文字を使った柔らかい口調で可。それ以外は通常の敬語。
+7. テンプレの ux_enhanced を手本に、顧客の文面に合わせて自然に整える。前置きの説明やメタ発言は書かず、返信本文だけを出力する。
+```
+
+### ユーザープロンプトの構造（`buildUserPrompt`）
+
+コードが組み立てて渡す。**LLMが見る「事実」はここに列挙された分だけ** です。
+
+```text
+# 顧客メッセージ
+{顧客の本文}
+
+# チャネル
+{email / LINE / Instagram など}
+
+# 宛名
+{顧客名} 様
+
+# 提供された事実（これ以外の事実を述べない）
+- 販売中フレーバー: …
+- 賞味期限/日持ち: …
+- 問い合わせ対象の商品: …（status="…", 〔notes: …〕）
+- （カテゴリに応じて発送目安・自販機リスト・定期便状態などを追加）
+
+# 手本テンプレ（TPL-xxx タイトル）
+{ux_enhanced ＝ 口調の見本}
+
+# テンプレの厳守事項(note)
+{禁止事項・必須要素}
+
+# 参照下書き（整文の土台。事実はこの範囲を超えない）
+{決定的 compose() が生成した下書き}
+
+# 未確定スロット（値を発明せず [要確認: …] で残す）
+- …
+
+上記に基づき、返信本文のみを日本語で出力してください（署名・会社情報は不要）。
+```
+
+### 評価も同じモデル ── LLM-as-judge
+
+生成した下書きを、**同じ Claude が採点者** になって2軸で採点します。ルーブリック（採点者のシステムプロンプト）は
+[`.claude/skills/eval-rubric/SKILL.md`](.claude/skills/eval-rubric/SKILL.md) を **そのまま** system として読み込みます。
+
+| 軸 | 0 | 1 | 2 |
+|---|---|---|---|
+| `factual_alignment`（KBと矛盾しないか） | KBの数値/期間/ルールに明確に矛盾 | 部分的な不一致・曖昧な言い換え | KBに完全一致、または「確認します」と安全に処理 |
+| `no_hallucination`（KBにない事実を断定しないか） | KBにない事実を断定 | KB値の代わりに「たぶん」等で濁す | KB由来の事実しか述べていない |
+
+両軸が2点で「合格」。出力は厳密なJSON1個のみ（パース失敗はパイプラインを壊す）。
+「採点者」と「執筆者」が同じモデルなので、**採点者は執筆者が何を守るべきかを正確に知っている** ── ここが安く効きます。
+
+---
+
+## 評価と自己改善ループ
+
+| パス | 実行 | 採点対象 | 頻度 |
+|---|---|---|---|
+| `npm run eval` | 決定的エンジン × ゴールデンセット | カテゴリ精度・エスカレ精度（FNは必ず0）・テンプレ網羅率 | 全コード/KB変更時（CI向き・無料・再現可能） |
+| `npm run eval:llm -- --judge` | LLM整文出力 × LLMジャッジ | `factual_alignment` / `no_hallucination`（各0-2、両軸2点で合格） | プロンプト/KB変更時（要APIキー・日次〜週次） |
+
+### エスカレ精度が最優先
+
+```
+FN = エスカレすべきなのに、しなかった  ← 危険。必ず0
+FP = エスカレ不要なのに、した          ← 鬱陶しいが許容。最小化する
+```
+
+`FN > 0` はデプロイをブロックする失敗として扱います。**システムは意図的に「過剰エスカレ寄り」** に倒しています。
+
+### worst-5 ループ（自己改善の実測）
+
+1. 各ケースの下書きを生成 → ジャッジが採点
+2. 最低スコアの5件を取る
+3. 根本原因を分類（KB追加／プロンプト改訂／別名追加／新テンプレ／分類器調整／要運用者確認）
+4. 変更を提案・適用
+5. 再評価 → worst-5 が潰れ、他が悪化していないか検証
+
+実運用での代表的な1イテレーション：
+
+> **Day N（ベースライン）**: factual_alignment 平均 **1.67**、合格率 **73%**（36/49）。
+> worst-5の内訳: 3件「SYSTEM_PROMPTがテンプレの `notes` を強制していなかった」／1件「商品別名の欠落」／1件「決済の誤分類」。
+> **Day N の変更**: SYSTEM_PROMPTに1行追加／`PRODUCT_ALIASES` 拡張／決済カテゴリの共起ルール。
+> **Day N+5（5営業日後）**: factual_alignment 平均 **1.77**、合格率 **80%**（+7pt）。worst-5のうち3件が完治、残りは悪化なし。
+
+このループは `/eval-analyze-improve` という Claude Code スキルにしてあり、`/loop 1d` と組み合わせれば
+**日次で自走** します。詳細は [`docs/eval-methodology.md`](docs/eval-methodology.md)。
+
+### 進捗を追う ── 「前回よりどう成長したか」
+
+改善ループを回すだけでは、**「本当に前回より良くなっているのか」** が見えません。
+そこで、評価のたびに見出し指標のスナップショットを **追記型の台帳** に残し、前回比を出す仕組みを入れています。
+
+```bash
+npm run progress                 # スナップショットを記録し、前回比を表示
+npm run progress -- --note "…"   # 何を変えたかを添えて記録
+npm run progress:show            # 台帳と最新の前回比を表示（記録はしない）
+```
+
+- 台帳 [`reports/progress.jsonl`](reports/progress.jsonl) と表 [`reports/progress.md`](reports/progress.md) は
+  **意図的に git にコミット** しています。成長の履歴そのものがポートフォリオの一部だからです。
+- 各スナップショットは **決定的評価**（カテゴリ精度・エスカレ精度・FN・テンプレ網羅）を毎回再現可能に記録。
+- `npm run eval:llm -- --report` を走らせた回は、LLMジャッジの数値（合格率・事実整合・無ハルシネーション）が
+  自動で同じ台帳に紐づきます（サイドカー経由。ブレやすいMDパースはしない）。
+- `dataset=production` は本番50件での実測履歴、`dataset=public-sample` は本リポジトリの匿名10件での計測、と
+  出自を分けて記録するので、**数字を混同しません。**
+
+実際の台帳が示す成長（本番データ）：
+
+```
+前回比（dataset=production）
+  基準: 2026-06-13 "本番ベースライン（50件全件採点）"
+  エスカレ精度   : 98.0% → 98.0%  ＝ 0.0pt
+  FN(危険な見逃し): 0 → 0  ＝ 0
+  LLM合格率      : 73.5% → 80.0%  ▲ +6.5pt
+  事実整合(0-2)  : 1.67 → 1.77  ▲ +0.10
+  無ハルシ(0-2)  : 1.86 → 1.86  ＝ 0.00
 ```
 
 ---
 
-## 4. Try it locally
+## 技術スタック
+
+| レイヤ | 選択 | 補足 |
+|---|---|---|
+| エンジン | **TypeScript**（Node 22.18+） | ビルド不要でそのまま Workers に import できる |
+| LLM | **Anthropic Claude Sonnet 4.6** | 日本語敬語の品質を優先。ジャッジ用のJSON出力も安定 |
+| ナレッジ | **5つのJSONマスタ**（ベクトルDBなし） | この規模なら `git diff` のほうが監査しやすい |
+| 受信箱 | **Gmail API（OAuth 2.0 Desktop）** | refresh_token で 24/7 |
+| ホスティング | **Cloudflare Workers + Cron Triggers** | 常時稼働・PC不要・月数千円規模 |
+| シークレット | **`wrangler secret`** | プラットフォーム側で暗号化 |
+| 評価 | **LLM-as-judge（Claude）** | 人手採点を約1/10のコストで再現 |
+
+> **技術選定の正直なところ。** 言語・フレームワーク・モデル・インフラといった **スタックの選定は、AIエージェントに任せました。**
+> 「なんとなくこれが良い」でAIが提案した構成に乗っています。ただし乗ったあとで、
+> 「この規模ならベクトルDBは要らない」「敬語品質を考えるとSonnet」といった判断は自分で検証しました。
+> なお安いモデル（Haiku等）や Groq 系との厳密なコスト比較評価は、まだやり切れていません（→ [これから改善したいこと](#これから改善したいこと)）。
+
+---
+
+## コストの考え方
+
+金額の詳細（契約額）は伏せますが、桁感だけ正直に書きます。
+
+- **構築費**: 一般的なSIベンダーの見積は数百万円〜になりますが、それより **桁違いに安く**、
+  スタートアップの予算内に収めました。
+- **月額運用費**: Cloudflare Workers はほぼ無料枠〜数ドル、Anthropic API は
+  「1問い合わせあたり 入力≈1k + 出力≈500 トークン × 月180件」程度の従量課金。合わせて **月数千円規模** です。
+- **効いているのは金額よりも「運用の軽さ」**: 「PC不要・常時稼働・月数千円」という運用ストーリーそのものが、
+  少人数のブランドにとっての価値でした。
+
+---
+
+## 開発体制 ── 人間が決めたこと / AIに任せたこと
+
+sumitype と同じく、正直に分けます。**「全部自分で書きました」とは言いません。**
+
+**自分（人間）が決めたこと（＝製品判断・設計）:**
+
+- **何を作るか／何を絶対にさせないか**: 承認フローを残す、送信はさせない、というプロダクトの芯
+- **安全設計の発想**: 「プロンプトではなくコードで縛る」「`sendMessage` を消す」というアーキテクチャ上の意思決定
+- **分類カテゴリとエスカレ規則**: 16カテゴリの切り方、7つの必須エスカレ、過剰エスカレ寄りに倒す方針
+- **評価の設計**: ゴールデンセットの作り方、2軸ルーブリック、FN=0をデプロイブロックにする基準、worst-5ループ
+- **KB運用**: 事実の唯一の出典を1か所に固定する、という運用ルールそのもの
+
+**AIエージェント（Claude Code）に任せたこと:**
+
+- 上記の設計に沿った **実装コードの大半の執筆**（TypeScript・Workers・Gmailクライアント等）
+- **技術スタックの選定**（言語/FW/モデル/インフラ ── 前述のとおり）
+- リファクタリングやテストの補助
+
+つまり、**「何を作るか・どう縛るか」は自分が握り、「それをコードに落とす」はAIと二人三脚** でした。
+設計とアルゴリズムは自分が主導し、AIは強力な実装パートナーだった、という分担です。
+
+この分担だったからこそ、知識抽出・評価フレームワーク・安全設計・デプロイまでを **個人で約10日** で
+実運用接続まで持っていけました。AIエージェントに実装を任せられたことが、この速度の主因です。
+
+---
+
+## ピボット ── うまくいかなかったこと
+
+きれいに一直線では進んでいません。特に **メールの結線** で何度も詰まりました。
+
+**① 受信するメールアドレスを取り違えていた。**
+最初は `support@` 宛の受信箱をポーリングする実装にしていました。ところが実際の一次問い合わせは
+別のアドレス（`info@`）に届いており、`support@` には転送されていなかった。
+「本番稼働を始めたのに、ボットが実際の問い合わせをほとんど拾えていない」という状態に一度なりました。
+最終的には転送設定で `support@` に流し込むことで解決。
+
+**② 転送されたメールの「送信元」が顧客ではなかった。**
+転送で流れてきた問い合わせは、送り主が顧客名ではなく、**ECプラットフォームの自動送信（no-reply）アドレス** でした。
+それだと宛名も分からず、返信をうまく組み立てられない。
+そこで **転送メールの本文を読み、本文中に埋もれている顧客名・メールアドレス・注文ID を拾って使う** 方式に切り替えました。
+本文パースは想定よりずっと難しく、ここは今も泥臭い部分が残っています。
+
+こうした「泥」は、実運用に接続して初めて分かることでした。ゴールデンセットの `trap` ケースは、
+こうした現場の失敗をそのまま教材化したものです。
+
+---
+
+## これから改善したいこと
+
+減点ではなく、自覚しているという意味で正直に。
+
+- **学習強度が弱い。** worst-5ループは回るものの、「人間が下書きをどう編集して送ったか」を
+  正解シグナルとして KB/プロンプトへ自動で還元する部分は、まだ実測・半自動の域です。ここを本当の自己改善ループにしたい。
+- **エスカレーションの導線。** 「人間対応キューに回す」判定はできても、その先の通知〜担当者への受け渡し導線が素朴。
+  誰に・どの手段で・どう再現性をもって渡すかを、もっと運用に耐える形にしたい。
+- **ロングテールFAQへの対応。** 現状は定型テンプレ＋マスタ引当が中心で、細かい一問一答（FAQ）を
+  検索可能なストアとして持つ仕組みが公開ミラーには入っていません。ここは「疑似RAG」を一歩進める余地。
+- **安いモデルとの比較評価。** Sonnet を敬語品質で選んでいますが、Haiku 等との
+  品質×コストの厳密な比較評価はまだやり切れていません。
+
+---
+
+## ローカルで試す
 
 ```bash
 git clone https://github.com/kydlp/cs-rag-engine
 cd cs-rag-engine
 npm install
 
-# Deterministic demo (no API key needed):
+# 決定的デモ（APIキー不要）:
 npm run demo
 node src/demo.ts "賞味期限はどれくらい？"
 
-# Golden-set evaluation:
+# ゴールデンセット評価:
 npm run eval
-npm run eval:report   # writes reports/eval_baseline.md
+npm run eval:report        # reports/eval_baseline.md を出力
 
-# LLM judge (requires API key):
+# LLMジャッジ（要APIキー）:
 ANTHROPIC_API_KEY=sk-ant-... npm run eval:llm
+
+# 進捗を記録して前回比を見る:
+npm run progress -- --note "何を変えたか"
+npm run progress:show      # 台帳と前回比を表示
 ```
 
----
-
-## 5. Deploy (Cloudflare Workers)
+## デプロイ（Cloudflare Workers）
 
 ```bash
 cd workers
 npm install
 npx wrangler login
 
-# Obtain a refresh_token once (local):
+# refresh_token を一度だけ取得（ローカル）:
 GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=... \
   node scripts/get_refresh_token.mjs
 
-# Register secrets:
+# シークレット登録:
 npx wrangler secret put ANTHROPIC_API_KEY
 npx wrangler secret put GOOGLE_CLIENT_ID
 npx wrangler secret put GOOGLE_CLIENT_SECRET
 npx wrangler secret put GOOGLE_REFRESH_TOKEN
 
-# Bundle KB and deploy:
+# KBをバンドルしてデプロイ:
 npm run build-kb
 npm run deploy
 ```
 
-Edit `wrangler.toml` `crons = ["*/5 * * * *"]` and re-deploy to enable the schedule.
-
-Full guide: [`workers/README.md`](workers/README.md).
-
----
-
-## 6. Out of scope (by design)
-
-- **Auto-send to customers** — Hard Rule. The engine has no `sendMessage` code path.
-- **Attachment handling** — foreign-object cases need a human to inspect the photo.
-- **Stale thread context** — only the latest customer message is used; we deliberately avoid mis-grounding on past exchanges.
+`wrangler.toml` の `crons = ["*/5 * * * *"]` を設定して再デプロイすると、5分ごとのポーリングが有効になります。
+手順の全文は [`workers/README.md`](workers/README.md)。
 
 ---
 
-## 7. What I learned (notes for the next project)
+## リポジトリ構成
 
-- **"Bind the LLM with code, not the prompt."** Removing send code entirely is more robust than asking the model not to send.
-- **At ~120 inquiries/month, pgvector / ChromaDB is overkill.** 5 JSON masters are auditable via `git diff` and small enough that the LLM can see the full relevant snapshot. Swap to a vector store when the KB grows past a few hundred entries.
-- **A fast improvement loop (73→80% in 5 days) is the most credible commercial deliverable.** It proves continuous improvement, not just a baseline.
-- **Cloudflare Workers + Cron flattens the operational story.** "No PC required, costs $5/month" matters a lot for a freelance contract.
+```
+cs-rag-engine/
+├── docs/          architecture / safety-rules / eval-methodology
+├── src/
+│   ├── engine/    classify / escalation / compose / compose_llm / gate / kb
+│   ├── eval/      run / gate_report / llm_quality（LLMジャッジ）/ progress（進捗台帳）
+│   ├── mail/      MCP-Gmail 半手動ループ
+│   └── adapters/  line-harness（LINEアダプタ）
+├── reports/       progress.jsonl / progress.md（コミット対象の成長ログ）
+├── workers/       Cloudflare Workers 本番ループ（Cron + Gmail + engine bundle）
+├── data/
+│   ├── kb/        5マスタ（匿名化した架空ブランド）
+│   ├── extracted/ templates_v2.jsonl（サンプル）
+│   └── eval/      ゴールデンセット（サンプル10件）
+└── .claude/       cs-triage / eval-analyze-improve / eval-rubric（ジャッジ用）
+```
 
 ---
 
-## 8. Acknowledgements
+## ライセンス・連絡先
 
-This is the public-facing version of a freelance project. The production system, customer LINE / mail logs, and contractual details remain private. The original engineering effort (knowledge extraction, evaluation framework, safety design, deployment) was solo over ~10 days.
-
-## License
-
-MIT — see [`LICENSE`](LICENSE). The sample KB + golden set in this repository are entirely synthetic.
-
-## Contact
+MIT ── [`LICENSE`](LICENSE) 参照。本リポジトリのサンプルKB・ゴールデンセットは **すべて架空** です。
 
 - GitHub: [@kydlp](https://github.com/kydlp)
 - Email: motchiapple@gmail.com
 
-Production code, full evaluation logs, and detailed cost / agreement-rate metrics are available on request (e.g. for a recruiting / consulting conversation).
+本番コード・実運用の詳細な数字・採用率などの実測値は、採用/受託のご相談ベースで個別に共有します。

@@ -7,7 +7,9 @@ dist/
 reports/_*.jsonl
 reports/eval_baseline.md
 reports/llm_quality.md
+reports/llm_quality.latest.json
 reports/improvement_log_*.md
 reports/shadow_log.jsonl
+# reports/progress.jsonl and reports/progress.md are committed on purpose (growth log).
 .DS_Store
 Thumbs.db
