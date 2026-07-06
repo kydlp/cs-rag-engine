@@ -14,6 +14,13 @@
 > 忠実に再現していますが、クライアント名・顧客データ・本番プロンプト・実ナレッジは差し替えています。
 > 本番コードと実運用の詳細な数字は非公開で、対面デモは応相談です。
 
+> **CS・カスタマーエクスペリエンス・ナレッジマネジメント職の採用担当の方へ。**
+> このリポジトリはエンジニア向けの書き方をしていますが、中身は
+> **カスタマーサポート × ナレッジマネジメント × 品質の定量改善** そのものです。
+> CS/ナレッジの視点で読み解いた [**docs/cs-knowledge-management.md**](docs/cs-knowledge-management.md) をご覧ください
+> ── 「回答のブレをどう仕組みで消すか」「AIでオペレーションをどう最適化するか」「品質をどう数値で改善するか」を、
+> このプロジェクト固有の事実と数字で書いています。
+
 ---
 
 ## これは何か
@@ -512,7 +519,7 @@ npm run deploy
 
 ```
 cs-rag-engine/
-├── docs/          architecture / safety-rules / eval-methodology
+├── docs/          architecture / safety-rules / eval-methodology / cs-knowledge-management（CS・ナレッジ視点）
 ├── src/
 │   ├── engine/    classify / escalation / compose / compose_llm / gate / kb
 │   ├── eval/      run / gate_report / llm_quality（LLMジャッジ）/ progress（進捗台帳）
