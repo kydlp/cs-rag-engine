@@ -60,7 +60,7 @@ src/
 
 ## Hard Rule enforcement, baked in
 
-- The engine has **no `sendMessage` call**. The only Gmail/LINE write is `createDraft`. A model change cannot cause an unintended send.
+- The engine in this mirror has **no `sendMessage` call** — the only Gmail/LINE write is `createDraft`. In production, sending exists but is reachable **only** through a code-verified human approval gate (a 👍 reaction from one pre-registered Discord approver ID; see `docs/safety-rules.md`). Either way, a model change cannot cause an unintended send.
 - Escalation is **code-based logic** (`escalation.ts`), not a prompt instruction. Foreign objects, refunds, legal mentions, vending install requests, etc. are filtered before any LLM call.
 - The signature is **machine-concatenated from `master_signature.json`**; the LLM is forbidden from generating it.
 - Author-facing conditional placeholders (`{…：example…}`) are stripped from auto-drafts so they never reach a customer.

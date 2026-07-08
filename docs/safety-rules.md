@@ -6,9 +6,17 @@ The system has two layers of safety enforcement: **Hard Rule** (always-on; never
 
 ## Hard Rule (top of CLAUDE.md / production policy)
 
-### 1. AI does not auto-send
+### 1. AI does not send unless a code-verified human approval triggers it
 
-- The engine codebase **has no `sendMessage` call**. The only Gmail write API used is `createDraft`. A model that "wants" to send cannot — there is no code path.
+> **Evolution (2026-07).** This rule used to read "the engine codebase has no `sendMessage` call at all — the only write API is `createDraft`". That was literally true for the first production phase. The rule has since matured, not weakened: the production system now includes a `sendDraft()` call, but the **only** code path that reaches it is a **code-verified human approval gate**. The philosophy is unchanged — the constraint is a code branch, not a prompt instruction, so a model swap can never break it.
+
+How the gate works (production; the Discord bot module is not yet included in this public mirror):
+
+- Every generated draft is posted to a private Discord approval channel (an internal, non-public console).
+- The single call site that reaches `gmail.sendDraft()` lives in `discord_flow.ts` (`handlePendingReactions`), and it fires **only on a 👍 reaction whose author strictly matches one pre-registered Discord user ID** (`approverId` — the decision-maker). Reactions from any other user, the bot itself, replies alone, or no reaction at all never reach `sendDraft()`.
+- A free-text reply from the approver triggers `reviseLLM()`, which produces a **new** draft reflecting the instruction — existing drafts are never rewritten in place. The superseded draft is labeled for deletion and removed by a monthly batch, so it remains available as an audit trail in the interim.
+- Category-level auto-send can be unlocked, but **only** by the approver answering an explicit yes/no question posted to Discord (👍/👎). The AI cannot unlock a category by itself. See "Auto-send allowlist" below for the per-mail safety checks that still apply inside an unlocked category.
+- Mandatory-escalation cases (`escalate=true`, the 7 categories below) are **always excluded** from category auto-send — `!reply.escalate` is a required condition at the entry of the send path.
 - For the LINE adapter, the relevant MCP tool (`send_message`) is **only invoked from the operator-facing slash command after an explicit human approval**. The engine itself never calls it.
 
 ### 2. PII masking on outbound LLM calls
@@ -57,7 +65,7 @@ Template `ux_enhanced` blocks may contain author-facing placeholders like `{在�
 
 A common failure mode in LLM-driven CS is: a new model release "tightens" or "loosens" a prompt rule unpredictably, and the agreement-rate metric silently slips. Our enforcement:
 
-1. **Sends are blocked at the codebase level** (no `sendMessage` import in the engine), so a model upgrade cannot introduce sends.
+1. **Sends are gated at the codebase level** — the single send call site is reachable only from a strict-match reaction by one pre-registered approver ID, so a model upgrade cannot introduce a new way to send.
 2. **Escalation routing is regex-based on the customer message + classifier category**, not "ask the model to flag risky messages". The categories that must escalate are listed explicitly in `escalation.ts`.
 3. **Signatures and time-dependent facts are inserted by code**, not regenerated each call, so they cannot drift with prompt changes.
 
@@ -79,7 +87,13 @@ DEFAULT_AUTO_SEND_CATEGORIES = {
 
 Categories not in this set (`payment`, `subscription_change`, `address_change_*`, `shipping_delay`, `receipt`, `duplicate_shipping`, `email_missing`, `other`) are always `human_approval` even when shadow is off.
 
-The allowlist expands per-tenant after a category has shown >95% AI–human agreement on the audit log for 90 days.
+**From plan to implementation (2026-07).** This section originally ended with a plan: "the allowlist expands per-tenant after a category has shown >95% AI–human agreement on the audit log for 90 days." That expansion mechanism is now implemented as a working Discord approval flow:
+
+- When a category has repeatedly been approved with no edits (measured from the audit log, not guessed), the system posts a yes/no question to the Discord approval channel: "may this category be sent without per-mail confirmation?". Only the approver's 👍 confirms; 👎 declines. **The AI cannot expand its own allowlist.**
+- Category unlock is a *coarse* permission, not a bypass. Every individual mail still passes the deterministic gate: if it has unresolved slots (`needsInfo`), KB freshness notices, or low classifier confidence, that one mail is routed back to human approval regardless of the category's status.
+- `escalate=true` mails are always excluded (see Hard Rule #1 and #3).
+
+Two layers, deliberately: a human-granted coarse permission per category, plus a per-mail deterministic checkpoint that fires every time.
 
 ---
 

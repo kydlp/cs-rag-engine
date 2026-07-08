@@ -21,12 +21,19 @@ flowchart LR
   Engine -->|createDraft| Gmail
   Engine -->|labelMessage 'ai-processed'| Gmail
 
-  Gmail -->|review drafts| Human[Human approval<br/>CS operator / decision-maker]
-  Human -->|send when approved| Customer
+  Engine -->|post every draft| Discord[Discord Bot<br/>approval channel<br/>polled on the same 5-min cron]
+  Discord -->|drafts + escalation notices| Human[Human approver<br/>decision-maker]
+  Human -->|👍 from the registered approver ID| Discord
+  Human -->|free-text reply = revision request| Discord
+  Discord -->|verified approval → sendDraft| Gmail
+  Discord -->|revision → reviseLLM → new draft| Engine
+  Gmail -->|send approved draft| Customer
 
   classDef edge fill:#FFF3E0,stroke:#F38020,color:#000
-  class Cron,Engine,LLM edge
+  class Cron,Engine,LLM,Discord edge
 ```
+
+The Discord bot module lives in the production repo and is not yet included in this public mirror; the mirror's Workers loop reflects the pre-pivot flow (drafts reviewed in Gmail).
 
 ## Module map
 
@@ -87,11 +94,15 @@ The masters themselves are identical — just the loader differs.
 
 A reply draft is one short response per inquiry. There's no multi-turn or tool-use loop. Anthropic's Messages API call returns a single body, which we post-process (salutation prefix, signature append) and write to Gmail Drafts. Cron 5min is enough — no Durable Object or queue is needed.
 
+## Why polling, not Gateway?
+
+The Discord approval flow follows the same bias. Instead of a persistent Gateway (WebSocket) connection, the bot piggybacks on the existing 5-minute cron tick and polls the approval channel (`getMessagesAfter` / `getReactionUserIds`). No always-on process, no reconnection logic, one shared schedule. The trade-off is up to 5 minutes of latency between the approver's 👍 and the actual send — acceptable for CS email, and revisitable (Durable Object) if it ever isn't. A practical constraint reinforced this: Cloudflare caps cron triggers at 5 per account, so a dedicated cron for Discord wasn't even available.
+
 ## Hard Rule enforcement (code-level)
 
 | Rule | Where enforced |
 |---|---|
-| AI never sends to customer | The engine has **no `sendMessage` code path**. Only `createDraft`. |
+| AI never sends without verified human approval | The single path to `sendDraft()` is `discord_flow.ts` (`handlePendingReactions`), triggered only by a 👍 whose author strictly matches the pre-registered approver ID. `escalate=true` mail is excluded at the entry; per-mail checks (`needsInfo` / KB freshness / confidence) still apply inside auto-send-unlocked categories. (Originally: no `sendMessage` code path at all — the constraint moved, the philosophy didn't.) |
 | KB-only facts | `composeLLM` builds a grounding context from masters; system prompt forbids inventing facts; deterministic fallback uses only template + master values. |
 | Required escalations | `escalation.ts` `HARD_ESCALATION` + `ALWAYS_ESCALATE` — code branches, not prompt instructions. |
 | Fixed signature | Code concatenates `master_signature.json` after the LLM body — the LLM is never asked to generate it. |
